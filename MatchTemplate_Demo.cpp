@@ -15,12 +15,15 @@ using namespace std;
 using namespace cv;
 
 /// Global Variables
-Mat img; Mat templ; Mat result;
-Mat mask;
+Mat img; Mat templ; Mat result; Mat img_depth; Mat templ_depth;
+Mat new_img; Mat new_templ;
+Mat mask; Mat resized_templ; Mat resized_mask;
 const char* image_window = "Source Image";
 const char* result_window = "Result window";
 const char* template_window = "Template";
 const char* mask_window = "Mask";
+const char* resized_template_window = "Resized Template";
+const char* resized_mask_window = "Resized Mask";
 
 int match_method = TM_SQDIFF;
 //int match_method = TM_CCORR_NORMED;
@@ -31,6 +34,7 @@ double dNan = numeric_limits<double>::quiet_NaN();
 /// Function Headers
 void MatchingMethod( int, void* );
 void Maskthreshold();
+void Mergechannels();
 
 /**
  * @function main
@@ -41,11 +45,16 @@ int main( int, char** argv )
   img = imread( argv[1], 1 );
   templ = imread( argv[2], 1 );
 
+  img_depth = imread( argv[3], 1);
+  templ_depth = imread( argv[4] ,1);
+
   /// Create windows
   namedWindow( image_window, WINDOW_AUTOSIZE );
   namedWindow( result_window, WINDOW_AUTOSIZE );
   namedWindow( template_window, WINDOW_AUTOSIZE );
   namedWindow( mask_window, WINDOW_AUTOSIZE );
+  namedWindow( resized_template_window, WINDOW_AUTOSIZE );
+  namedWindow( resized_mask_window, WINDOW_AUTOSIZE );
 
   /// Create Trackbar
   /*const char* trackbar_label = "Method: \n 0: SQDIFF \n 1: SQDIFF NORMED \n 2: TM CCORR \n 3: TM CCORR NORMED \n 4: TM COEFF \n 5: TM COEFF NORMED";
@@ -79,15 +88,27 @@ void MatchingMethod( int, void* )
   /// Conversion RGB to HSV
   cvtColor(img,img,CV_BGR2HSV);
   cvtColor(templ,templ,CV_BGR2HSV);
+  //cvtColor(img_display,img_display,CV_BGR2HSV);
+  //cvtColor(templ_display,templ_display,CV_BGR2HSV);
 
-  cvtColor(img_display,img_display,CV_BGR2HSV);
-  cvtColor(templ_display,templ_display,CV_BGR2HSV);
+  /// Conversion Depth to Gray
+  cvtColor(img_depth,img_depth,CV_BGR2GRAY);
+  cvtColor(templ_depth,templ_depth,CV_BGR2GRAY);
+
+  /// Merge the 3 channels image and the depth channel image into one 4 channels image
+  Mergechannels();
 
   /// Create the mask in HSV
   Maskthreshold();
 
+
+  Mat resized_templ_display;
+  resized_templ.copyTo( resized_templ_display );
+
   /// Do the Matching and Normalize
-  matchTemplate( img, templ, result, match_method, mask);
+  //matchTemplate( img, templ, result, match_method, mask);
+  //matchTemplate( new_img, new_templ, result, match_method, mask);
+  matchTemplate( new_img, resized_templ, result, match_method, resized_mask);
   normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat() );
 
   /// Localizing the best match with minMaxLoc
@@ -95,15 +116,6 @@ void MatchingMethod( int, void* )
   Point matchLoc;
 
   minMaxLoc( result, &minVal, &maxVal, &minLoc, &maxLoc, Mat() );
-
-  // Informations
-  /*cout << "The max value is:  " << maxVal << endl;
-  cout << "The min value is:  " << minVal << endl;
-  cout << "The max location is:  " << maxLoc << endl;
-  cout << "The min location is:  " << minLoc << endl;*/
-
-  /*cout << "Template size: " << templ.size() << endl;
-  cout << "Template column: " << templ.col(200) << endl;*/
 
   /// For SQDIFF and SQDIFF_NORMED, the best matches are lower values. For all the other methods, the higher the better
   if( match_method  == TM_SQDIFF || match_method == TM_SQDIFF_NORMED )
@@ -115,12 +127,27 @@ void MatchingMethod( int, void* )
   rectangle( img_display, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(0), 2, 8, 0 );
   rectangle( result, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(0), 2, 8, 0 );
 
+  rectangle( mask, Point(219,142),Point(478,423),Scalar::all(254), 2, 8, 0);
+
   imshow( image_window, img_display );
   imshow( result_window, result );
   imshow( template_window, templ_display );
   imshow( mask_window, mask );
+  imshow( resized_template_window, resized_templ_display );
+  imshow( resized_mask_window, resized_mask );
 
   return;
+}
+
+void Mergechannels()
+{
+	new_img = Mat(img.rows, img.cols, CV_8UC4);
+	new_templ = Mat(resized_templ.rows, resized_templ.cols, CV_8UC4);
+	int from_to1[]={0,0,1,1,2,2};
+	int from_to2[]={0,3};
+
+	mixChannels(&img,1,&new_img,1,from_to1,3);
+	mixChannels(&resized_templ,1,&new_templ,1,from_to2,1);
 }
 
 void Maskthreshold()
@@ -138,44 +165,60 @@ void Maskthreshold()
 		}
 	}
 
-	/// Reduce the template size
-	Point pixel_ul(0,0);
+	/// Find the minimum template size (upper left pixel and bottom right pixel)
+	Point pixel_ul(mask.rows,mask.cols);
 	Point pixel_br(0,0);
 
-	for(int j=0;j<mask.cols;j++)
+	for(int k=0;k<mask.cols;k++)
 	{
-		for(int i=0;i<mask.rows;i++)
+		for(int l=0;l<mask.rows;l++)
 		{
-			if(mask.at<Vec3b>(i,j)[0]==1)
+			if(mask.at<Vec3b>(l,k)[0]==1)
 			{
-				if(pixel_ul.x == 0)
+				if(k<pixel_ul.x)
 				{
-					pixel_ul.x = i;
+					pixel_ul.x=k;
 				}
-				if(pixel_ul.y == 0)
+				if(k>pixel_br.x)
 				{
-					pixel_ul.y = j;
+					pixel_br.x=k;
 				}
-			}
-			if(mask.at<Vec3b>(mask.rows-i,mask.cols-j)[0]==1)
-			{
-				if(pixel_br.x == 0)
+				if(l<pixel_ul.y)
 				{
-					pixel_br.x = mask.rows-i;
+					pixel_ul.y=l;
 				}
-				if(pixel_br.y == 0)
+				if(l>pixel_br.y)
 				{
-					pixel_br.y = mask.cols-j;
+					pixel_br.y=l;
 				}
 			}
 		}
 	}
 
-	//TOOO resize()
+	Mat rect_templ = templ(Rect(pixel_ul.x,pixel_ul.y,pixel_br.x-pixel_ul.x+1,pixel_br.y-pixel_ul.y+1));
+	rect_templ.copyTo(resized_templ);
 
+	resized_mask = Mat(resized_templ.rows,resized_templ.cols,resized_templ.type(),Scalar::all(254));
 
-	/*cout << "Pixel upper left x: " << pixel_ul.x << endl;
+	for(int j=0;j<resized_templ.cols;j++)
+	{
+		for(int i=0;i<resized_templ.rows;i++)
+		{
+			if(resized_templ.at<Vec3b>(i,j)[0]==0)
+			{
+				resized_mask.at<Vec3b>(i,j) = dNan;
+			}
+		}
+	}
+
+	//Mat rect_mask = mask(Rect(pixel_ul.x,pixel_ul.y,pixel_br.x-pixel_ul.x+1,pixel_br.y-pixel_ul.y+1));
+	//rect_mask.copyTo(resized_mask);
+
+	/*cout << "Template size before resizing: " << templ.size() << endl;
+	cout << "New template size: " << resized_templ.size() << endl;
+	cout << "Pixel upper left x: " << pixel_ul.x << endl;
 	cout << "Pixel upper left y: " << pixel_ul.y << endl;
 	cout << "Pixel bottom right x: " << pixel_br.x << endl;
-	cout << "Pixel bottom right y: " << pixel_br.y << endl;*/
+	cout << "Pixel bottom right y: " << pixel_br.y << endl;
+	cout << "Masked and resized" << endl;*/
 }
