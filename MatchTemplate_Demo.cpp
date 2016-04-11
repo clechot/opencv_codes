@@ -25,8 +25,8 @@ const char* mask_window = "Mask";
 const char* resized_template_window = "Resized Template";
 const char* resized_mask_window = "Resized Mask";
 
-//int match_method = TM_SQDIFF;
-int match_method = TM_CCORR_NORMED;
+int match_method = TM_SQDIFF;
+//int match_method = TM_CCORR_NORMED;
 int max_Trackbar = 5;
 int white = 254;
 double dNan = numeric_limits<double>::quiet_NaN();
@@ -55,10 +55,6 @@ int main( int, char** argv )
   namedWindow( mask_window, WINDOW_AUTOSIZE );
   namedWindow( resized_template_window, WINDOW_AUTOSIZE );
   namedWindow( resized_mask_window, WINDOW_AUTOSIZE );
-
-  /// Create Trackbar
-  /*const char* trackbar_label = "Method: \n 0: SQDIFF \n 1: SQDIFF NORMED \n 2: TM CCORR \n 3: TM CCORR NORMED \n 4: TM COEFF \n 5: TM COEFF NORMED";
-  createTrackbar( trackbar_label, image_window, &match_method, max_Trackbar, MatchingMethod );*/
 
   MatchingMethod( 0, 0 );
 
@@ -104,18 +100,20 @@ void MatchingMethod( int, void* )
   Mat resized_templ_display;
   resized_templ.copyTo( resized_templ_display );
 
-  //result.create( img.rows - resized_templ.rows + 1, img.cols - resized_templ.cols + 1, CV_32FC1 );
-
   /// Do the Matching and Normalize
-  //matchTemplate( img, resized_templ, result, match_method, resized_mask);
   matchTemplate( new_img, resized_templ, result, match_method, resized_mask);
-  normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat() );
+  //normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat() );
 
   /// Localizing the best match with minMaxLoc
   double minVal; double maxVal; Point minLoc; Point maxLoc;
   Point matchLoc;
 
   minMaxLoc( result, &minVal, &maxVal, &minLoc, &maxLoc, Mat() );
+
+  /// Score
+  cout << "Match method: " << match_method << endl;
+  cout << "Maximum value (for CCORR_NORMED 3): " << maxVal << endl;
+  cout << "Minimum value (for SQDIFF 0): " << minVal << endl;
 
   /// For SQDIFF and SQDIFF_NORMED, the best matches are lower values. For all the other methods, the higher the better
   if( match_method  == TM_SQDIFF || match_method == TM_SQDIFF_NORMED )
@@ -124,12 +122,10 @@ void MatchingMethod( int, void* )
     { matchLoc = maxLoc; }
 
   /// Show me what you got
-  //rectangle( img_display, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(0), 2, 8, 0 );
-  //rectangle( result, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(0), 2, 8, 0 );
   rectangle( img_display, matchLoc, Point( matchLoc.x + resized_templ.cols , matchLoc.y + resized_templ.rows ), Scalar::all(0), 2, 8, 0 );
   rectangle( result, matchLoc, Point( matchLoc.x + resized_templ.cols , matchLoc.y + resized_templ.rows ), Scalar::all(0), 2, 8, 0 );
 
-  rectangle( mask, Point(219,142),Point(478,423),Scalar::all(254), 2, 8, 0);
+  //rectangle( mask, Point(219,142),Point(478,423),Scalar::all(254), 2, 8, 0);
 
   imshow( image_window, img_display );
   imshow( result_window, result );
@@ -153,11 +149,6 @@ void Mergechannels()
 	mixChannels(&templ,1,&new_templ,1,from_to1,3);
 	mixChannels(&templ_depth,1,&new_templ,1,from_to2,1);
 
-	/*new_img = Mat(img.rows, img.cols, img.type());
-	new_templ = Mat(templ.rows, templ.cols, templ.type());
-	img.copyTo(new_img);
-	templ.copyTo(new_templ);*/
-
 	cout << "Channels mixed" << endl;
 }
 
@@ -175,6 +166,18 @@ void Maskthreshold()
 			}
 		}
 	}
+
+	// Test if the depth channel does something
+	/*for(int j=0;j<new_templ.cols;j++)
+	{
+		for(int i=0;i<new_templ.rows;i++)
+		{
+			new_templ.at<Vec4b>(i,j)[0]=0;
+			new_templ.at<Vec4b>(i,j)[1]=0;
+			new_templ.at<Vec4b>(i,j)[2]=0;
+			//new_templ.at<Vec4b>(i,j)[3]=0;
+		}
+	}*/
 
 	/// Find the minimum template size (upper left pixel and bottom right pixel)
 	Point pixel_ul(mask.rows,mask.cols);
@@ -209,25 +212,10 @@ void Maskthreshold()
 	Mat rect_templ = new_templ(Rect(pixel_ul.x,pixel_ul.y,pixel_br.x-pixel_ul.x+1,pixel_br.y-pixel_ul.y+1));
 	rect_templ.copyTo(resized_templ);
 
-	/*resized_mask = Mat(resized_templ.rows,resized_templ.cols,resized_templ.type(),Scalar::all(254));
-
-	for(int j=0;j<resized_templ.cols;j++)
-	{
-		for(int i=0;i<resized_templ.rows;i++)
-		{
-			if(resized_templ.at<Vec4b>(i,j)[0]==0)
-			{
-				resized_mask.at<Vec4b>(i,j) = dNan;
-			}
-		}
-	}*/
-
 	Mat rect_mask = mask(Rect(pixel_ul.x,pixel_ul.y,pixel_br.x-pixel_ul.x+1,pixel_br.y-pixel_ul.y+1));
 	rect_mask.copyTo(resized_mask);
 
-	/*cout << "Template size before resizing: " << templ.size() << endl;
-	cout << "New template size: " << resized_templ.size() << endl;
-	cout << "Pixel upper left x: " << pixel_ul.x << endl;
+	/*cout << "Pixel upper left x: " << pixel_ul.x << endl;
 	cout << "Pixel upper left y: " << pixel_ul.y << endl;
 	cout << "Pixel bottom right x: " << pixel_br.x << endl;
 	cout << "Pixel bottom right y: " << pixel_br.y << endl;*/
