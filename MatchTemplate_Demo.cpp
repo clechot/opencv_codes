@@ -25,10 +25,10 @@ const char* mask_window = "Mask";
 const char* resized_template_window = "Resized Template";
 const char* resized_mask_window = "Resized Mask";
 
-int match_method = TM_SQDIFF;
-//int match_method = TM_CCORR_NORMED;
+//int match_method = TM_SQDIFF;
+int match_method = TM_CCORR_NORMED;
 int max_Trackbar = 5;
-int thresh_background = 534;
+int white = 254;
 double dNan = numeric_limits<double>::quiet_NaN();
 
 /// Function Headers
@@ -101,13 +101,13 @@ void MatchingMethod( int, void* )
   /// Create the mask in HSV
   Maskthreshold();
 
-
   Mat resized_templ_display;
   resized_templ.copyTo( resized_templ_display );
 
+  //result.create( img.rows - resized_templ.rows + 1, img.cols - resized_templ.cols + 1, CV_32FC1 );
+
   /// Do the Matching and Normalize
-  //matchTemplate( img, templ, result, match_method, mask);
-  //matchTemplate( new_img, new_templ, result, match_method, mask);
+  //matchTemplate( img, resized_templ, result, match_method, resized_mask);
   matchTemplate( new_img, resized_templ, result, match_method, resized_mask);
   normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat() );
 
@@ -124,8 +124,10 @@ void MatchingMethod( int, void* )
     { matchLoc = maxLoc; }
 
   /// Show me what you got
-  rectangle( img_display, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(0), 2, 8, 0 );
-  rectangle( result, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(0), 2, 8, 0 );
+  //rectangle( img_display, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(0), 2, 8, 0 );
+  //rectangle( result, matchLoc, Point( matchLoc.x + templ.cols , matchLoc.y + templ.rows ), Scalar::all(0), 2, 8, 0 );
+  rectangle( img_display, matchLoc, Point( matchLoc.x + resized_templ.cols , matchLoc.y + resized_templ.rows ), Scalar::all(0), 2, 8, 0 );
+  rectangle( result, matchLoc, Point( matchLoc.x + resized_templ.cols , matchLoc.y + resized_templ.rows ), Scalar::all(0), 2, 8, 0 );
 
   rectangle( mask, Point(219,142),Point(478,423),Scalar::all(254), 2, 8, 0);
 
@@ -142,25 +144,34 @@ void MatchingMethod( int, void* )
 void Mergechannels()
 {
 	new_img = Mat(img.rows, img.cols, CV_8UC4);
-	new_templ = Mat(resized_templ.rows, resized_templ.cols, CV_8UC4);
+	new_templ = Mat(templ.rows, templ.cols, CV_8UC4);
 	int from_to1[]={0,0,1,1,2,2};
 	int from_to2[]={0,3};
 
 	mixChannels(&img,1,&new_img,1,from_to1,3);
-	mixChannels(&resized_templ,1,&new_templ,1,from_to2,1);
+	mixChannels(&img_depth,1,&new_img,1,from_to2,1);
+	mixChannels(&templ,1,&new_templ,1,from_to1,3);
+	mixChannels(&templ_depth,1,&new_templ,1,from_to2,1);
+
+	/*new_img = Mat(img.rows, img.cols, img.type());
+	new_templ = Mat(templ.rows, templ.cols, templ.type());
+	img.copyTo(new_img);
+	templ.copyTo(new_templ);*/
+
+	cout << "Channels mixed" << endl;
 }
 
 void Maskthreshold()
 {
-	mask = Mat(templ.rows,templ.cols,templ.type(),Scalar::all(1));
+	mask = Mat(new_templ.rows,new_templ.cols,new_templ.type(),Scalar::all(white));
 
-	for(int j=0;j<templ.cols;j++)
+	for(int j=0;j<new_templ.cols;j++)
 	{
-		for(int i=0;i<templ.rows;i++)
+		for(int i=0;i<new_templ.rows;i++)
 		{
-			if(templ.at<Vec3b>(i,j)[0]==0)
+			if(new_templ.at<Vec4b>(i,j)[0]==0)
 			{
-				mask.at<Vec3b>(i,j) = dNan;
+				mask.at<Vec4b>(i,j) = dNan;
 			}
 		}
 	}
@@ -173,7 +184,7 @@ void Maskthreshold()
 	{
 		for(int l=0;l<mask.rows;l++)
 		{
-			if(mask.at<Vec3b>(l,k)[0]==1)
+			if(mask.at<Vec4b>(l,k)[0]==white)
 			{
 				if(k<pixel_ul.x)
 				{
@@ -195,30 +206,30 @@ void Maskthreshold()
 		}
 	}
 
-	Mat rect_templ = templ(Rect(pixel_ul.x,pixel_ul.y,pixel_br.x-pixel_ul.x+1,pixel_br.y-pixel_ul.y+1));
+	Mat rect_templ = new_templ(Rect(pixel_ul.x,pixel_ul.y,pixel_br.x-pixel_ul.x+1,pixel_br.y-pixel_ul.y+1));
 	rect_templ.copyTo(resized_templ);
 
-	resized_mask = Mat(resized_templ.rows,resized_templ.cols,resized_templ.type(),Scalar::all(254));
+	/*resized_mask = Mat(resized_templ.rows,resized_templ.cols,resized_templ.type(),Scalar::all(254));
 
 	for(int j=0;j<resized_templ.cols;j++)
 	{
 		for(int i=0;i<resized_templ.rows;i++)
 		{
-			if(resized_templ.at<Vec3b>(i,j)[0]==0)
+			if(resized_templ.at<Vec4b>(i,j)[0]==0)
 			{
-				resized_mask.at<Vec3b>(i,j) = dNan;
+				resized_mask.at<Vec4b>(i,j) = dNan;
 			}
 		}
-	}
+	}*/
 
-	//Mat rect_mask = mask(Rect(pixel_ul.x,pixel_ul.y,pixel_br.x-pixel_ul.x+1,pixel_br.y-pixel_ul.y+1));
-	//rect_mask.copyTo(resized_mask);
+	Mat rect_mask = mask(Rect(pixel_ul.x,pixel_ul.y,pixel_br.x-pixel_ul.x+1,pixel_br.y-pixel_ul.y+1));
+	rect_mask.copyTo(resized_mask);
 
 	/*cout << "Template size before resizing: " << templ.size() << endl;
 	cout << "New template size: " << resized_templ.size() << endl;
 	cout << "Pixel upper left x: " << pixel_ul.x << endl;
 	cout << "Pixel upper left y: " << pixel_ul.y << endl;
 	cout << "Pixel bottom right x: " << pixel_br.x << endl;
-	cout << "Pixel bottom right y: " << pixel_br.y << endl;
-	cout << "Masked and resized" << endl;*/
+	cout << "Pixel bottom right y: " << pixel_br.y << endl;*/
+	cout << "Masked and resized" << endl;
 }
