@@ -25,8 +25,8 @@ const char* mask_window = "Mask";
 const char* resized_template_window = "Resized Template";
 const char* resized_mask_window = "Resized Mask";
 
-int match_method = TM_SQDIFF;
-//int match_method = TM_CCORR_NORMED;
+//int match_method = TM_SQDIFF;
+int match_method = TM_CCORR_NORMED;
 int max_Trackbar = 5;
 int white = 254;
 double dNan = numeric_limits<double>::quiet_NaN();
@@ -101,6 +101,7 @@ void MatchingMethod( int, void* )
   resized_templ.copyTo( resized_templ_display );
 
   /// Do the Matching and Normalize
+  //matchTemplate( new_img, resized_templ, result, match_method);
   matchTemplate( new_img, resized_templ, result, match_method, resized_mask);
   //normalize( result, result, 0, 1, NORM_MINMAX, -1, Mat() );
 
@@ -168,16 +169,16 @@ void Maskthreshold()
 	}
 
 	// Test if the depth channel does something
-	/*for(int j=0;j<new_templ.cols;j++)
-	{
-		for(int i=0;i<new_templ.rows;i++)
-		{
-			new_templ.at<Vec4b>(i,j)[0]=0;
-			new_templ.at<Vec4b>(i,j)[1]=0;
-			new_templ.at<Vec4b>(i,j)[2]=0;
-			//new_templ.at<Vec4b>(i,j)[3]=0;
-		}
-	}*/
+	// for(int j=0;j<new_templ.cols;j++)
+	// {
+	// 	for(int i=0;i<new_templ.rows;i++)
+	// 	{
+	// 		//new_templ.at<Vec4b>(i,j)[0]=0;
+	// 		//new_templ.at<Vec4b>(i,j)[1]=0;
+	// 		//new_templ.at<Vec4b>(i,j)[2]=0;
+	// 		//new_templ.at<Vec4b>(i,j)[3]=0; // no depth channel
+	// 	}
+	// }
 
 	/// Find the minimum template size (upper left pixel and bottom right pixel)
 	Point pixel_ul(mask.rows,mask.cols);
